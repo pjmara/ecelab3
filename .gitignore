@@ -1,0 +1,8 @@
+*
+
+!.gitignore
+!main.c
+
+!*/
+
+/Debug/
