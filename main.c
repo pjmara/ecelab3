@@ -20,6 +20,7 @@ void stoptimerA2(int reset);
 void configUserLEDs();
 void configADCTemp();
 void configADCWheel();
+void configUserButtons();
 
 unsigned int in_temp;
 
@@ -111,6 +112,21 @@ void configADCTemp() {
     ADC12MCTL0 = ADC12SREF_1 + ADC12INCH_10;
     __delay_cycles(100);
     ADC12CTL0 |= ADC12ENC;
+}
+
+void configUserButtons() {
+    P2SEL = P2SEL & ~(BIT1);
+    P1SEL = P1SEL & ~(BIT1);
+
+    P2DIR = P2DIR & ~(BIT1);
+    P1DIR = P1DIR & ~(BIT1);
+
+    P2REN = P2REN | (BIT1);
+    P1REN = P1REN | (BIT1);
+
+    P2OUT = P2OUT | (BIT1);
+    P1OUT = P1OUT | (BIT1);
+
 }
 
 void configADCWheel() {
