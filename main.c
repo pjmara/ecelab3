@@ -28,7 +28,7 @@ void convertToGlobal();
 void displayTime();
 void sync();
 char * changeType(int num);
-char * floatToString(float num, char * ret);
+char * floatToString(float num, char * ret, int unit);
 void rev(char * s);
 
 
@@ -81,6 +81,7 @@ void main(void)
     float avgC = 0;
     float avgF = 0;
     int divider = 0;
+    bool inProgress = false;
 
 
     int q = 0;
@@ -116,6 +117,8 @@ void main(void)
 
     degC_per_bit = ((float) 55.0)/((float) CAL85 - CAL30);
     currentState = DISPLAY;
+    int dispType = 0;
+
     while (1)    // Forever loop
     {
         int press = returnState();
@@ -149,10 +152,10 @@ void main(void)
 
             ADC12CTL0 &= ~ADC12SC;
             ADC12CTL0 |= ADC12SC;
-            while ((ADC12CTL1 & ADC12BUSY) && updateTemp) {
+            while ((ADC12CTL1 & ADC12BUSY) || updateTemp) {
                 __no_operation();
             }
-            updateTemp = false;
+            updateTemp = true;
             in_temp = ADC12MEM0;
             tempC = (float)(((long)in_temp - CAL30)*degC_per_bit) + 30.0; //check this line if problems
             tempF = tempC * 9.0 / 5.0 + 32.0;
@@ -163,6 +166,7 @@ void main(void)
             tempFar[tempIndex] = tempF;
             sumC += tempCel[tempIndex];
             sumF += tempFar[tempIndex];
+
 
             if(divider < 10){
                 divider++;
@@ -177,15 +181,73 @@ void main(void)
 
 
 
+            int start;
 
-            Graphics_clearDisplay(&g_sContext); // Clear the display
-            Graphics_drawStringCentered(&g_sContext, monthDay, AUTO_STRING_LENGTH, 48, 15, TRANSPARENT_TEXT);
-            Graphics_drawStringCentered(&g_sContext, time, AUTO_STRING_LENGTH, 48, 35, TRANSPARENT_TEXT);
-            floatToString(avgC, ret);
-            Graphics_drawStringCentered(&g_sContext, ret, AUTO_STRING_LENGTH, 48, 55, TRANSPARENT_TEXT);
-            floatToString(avgF, ret);
-            Graphics_drawStringCentered(&g_sContext, ret, AUTO_STRING_LENGTH, 48, 75, TRANSPARENT_TEXT);
-            Graphics_flushBuffer(&g_sContext);
+            if(dispType == 0){
+                if(!inProgress){
+                    Graphics_clearDisplay(&g_sContext); // Clear the display
+                    start = timer_cnt;
+                }
+
+                Graphics_drawStringCentered(&g_sContext, monthDay, AUTO_STRING_LENGTH, 48, 15, OPAQUE_TEXT);
+                Graphics_flushBuffer(&g_sContext);
+                inProgress = true;
+                if(timer_cnt < start + 2){
+                    break;
+                }
+                inProgress = false;
+                dispType = (dispType + 1)%4;
+            }
+
+            if(dispType == 1){
+
+                if(!inProgress){
+                    Graphics_clearDisplay(&g_sContext); // Clear the display
+                    start = timer_cnt;
+                }
+                Graphics_drawStringCentered(&g_sContext, time, AUTO_STRING_LENGTH, 48, 35, OPAQUE_TEXT);
+                Graphics_flushBuffer(&g_sContext);
+                inProgress = true;
+                if(timer_cnt < start + 2){
+                    break;
+                }
+                inProgress = false;
+                dispType = (dispType + 1)%4;
+            }
+
+            if(dispType == 2){
+
+                floatToString(avgC, ret, 0);
+                if(!inProgress){
+                    Graphics_clearDisplay(&g_sContext); // Clear the display
+                    start = timer_cnt;
+                }
+                Graphics_drawStringCentered(&g_sContext, ret, AUTO_STRING_LENGTH, 48, 55, OPAQUE_TEXT);
+                Graphics_flushBuffer(&g_sContext);
+                inProgress = true;
+                if(timer_cnt < start + 2){
+                    break;
+                }
+                inProgress = false;
+                dispType = (dispType + 1)%4;
+            }
+
+            if(dispType == 3){
+
+                floatToString(avgF, ret, 1);
+                if(!inProgress){
+                    Graphics_clearDisplay(&g_sContext); // Clear the display
+                    start = timer_cnt;
+                }
+                Graphics_drawStringCentered(&g_sContext, ret, AUTO_STRING_LENGTH, 48, 75, OPAQUE_TEXT);
+                Graphics_flushBuffer(&g_sContext);
+                inProgress = true;
+                if(timer_cnt < start + 2){
+                    break;
+                }
+                inProgress = false;
+                dispType = (dispType + 1)%4;
+            }
             break;
 
         case SETUP:
@@ -423,7 +485,7 @@ void stoptimerA2(int reset) {
 #pragma vector=TIMER2_A0_VECTOR
 __interrupt void TimerA2_ISR (void) {
         timer_cnt++;
-        updateTemp = true;
+        updateTemp = false;
         P1OUT = P1OUT ^ BIT0;
         P4OUT ^= BIT7;
 }
@@ -452,7 +514,7 @@ void rev(char * s){
     strcpy(s, r);
 }
 
-char * floatToString(float num, char * ret){
+char * floatToString(float num, char * ret, int unit){
     int x = (int) num;
     float rem = num - x;
     int firstAfterDot = (int)(rem * 10);
@@ -470,6 +532,12 @@ char * floatToString(float num, char * ret){
     arr[i++] = '0' + firstAfterDot;
     arr[i] = '\0';
     strcpy(ret,arr);
+    if(unit == 0){
+        strcat(ret,"C");
+    }
+    else{
+        strcat(ret,"F");
+    }
     return ret;
 }
 
