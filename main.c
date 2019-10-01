@@ -4,6 +4,7 @@
 
 #include <msp430.h>
 #include<stdio.h>
+#include<string.h>
 /* Peripherals.c and .h are where the functions that implement
  * the LEDs and keypad, etc are. It is often useful to organize
  * your code by putting like functions together in files.
@@ -21,11 +22,18 @@ void configUserLEDs();
 void configADCTemp();
 void configADCWheel();
 void configUserButtons();
+int returnState();
+char * numberToMonth(int num);
+void convertToGlobal();
+void displayTime();
 
 unsigned int in_temp;
 
+enum state{DISPLAY, SETUP};
+int modifiedMonth, modifiedDate, modifiedHour, modifiedMinutes, modifiedSeconds;
 
-unsigned long int timer_cnt = 619200;
+//unsigned long int timer_cnt = 619200;
+unsigned long int timer_cnt = 23562231;
 // Declare globals here
 
 // Main
@@ -39,16 +47,22 @@ void main(void)
     _BIS_SR(GIE);
     configUserLEDs();
     runtimerA2();
-    configADCWheel();
+
 
     // Useful code starts here
     initLeds();
 
     configDisplay();
     configKeypad();
+    configUserButtons();
     //timer_cnt = 691200;
 
     volatile float tempC, tempF, degC_per_bit;
+    enum state currentState;
+    int modifyIndex = 0;
+    char disp[5];
+
+
 
     // *** Intro Screen ***
     Graphics_clearDisplay(&g_sContext); // Clear the display
@@ -70,8 +84,129 @@ void main(void)
     Graphics_flushBuffer(&g_sContext);
 
     degC_per_bit = ((float) 55.0)/((float) CAL85 - CAL30);
+    currentState = DISPLAY;
     while (1)    // Forever loop
     {
+        int press = returnState();
+        if(press == 1){
+            if(modifyIndex > 0){
+                modifyIndex++;
+            }
+            else{
+                currentState = SETUP;
+                modifyIndex++;
+                configADCWheel();
+            }
+        }
+        else if(press == 2){
+            currentState = DISPLAY;
+            modifyIndex = 0;
+            configADCTemp();
+        }
+        switch(currentState){
+        case DISPLAY:
+
+            disp[0] = '0' + modifyIndex;
+            disp[1] = '\0';
+
+            Graphics_clearDisplay(&g_sContext); // Clear the display
+            Graphics_drawStringCentered(&g_sContext, disp, AUTO_STRING_LENGTH, 48, 15, TRANSPARENT_TEXT);
+            Graphics_flushBuffer(&g_sContext);
+            displayTime();
+            break;
+        case SETUP:
+
+            disp[0] = '0' + modifyIndex;
+            disp[1] = '\0';
+
+
+            Graphics_clearDisplay(&g_sContext); // Clear the display
+            Graphics_drawStringCentered(&g_sContext, disp, AUTO_STRING_LENGTH, 48, 15, TRANSPARENT_TEXT);
+            Graphics_flushBuffer(&g_sContext);
+
+
+
+            ADC12CTL0 |= ADC12SC;
+
+            while (ADC12CTL1 & ADC12BUSY) {
+                __no_operation();
+            }
+            in_value = ADC12MEM0 & 0X0FFF;
+
+            if(modifyIndex == 1){
+                modifiedMonth = in_value/341 + 1;
+                Graphics_clearDisplay(&g_sContext); // Clear the display
+                Graphics_drawStringCentered(&g_sContext, numberToMonth(in_value/341 + 1), AUTO_STRING_LENGTH, 48, 35, TRANSPARENT_TEXT);
+                Graphics_flushBuffer(&g_sContext);
+            }
+            else if(modifyIndex == 2){
+                modifiedDate = in_value/132 + 1;
+                if(modifiedDate < 10){
+                    disp[0] = '0';
+                    disp[1] = '0' + modifiedDate;
+                    disp[2] = '\0';
+                }
+                else{
+                    disp[0] = '0' + modifiedDate/10;
+                    disp[1] = '0' + modifiedDate%10;
+                    disp[2] = '\0';
+                }
+                Graphics_clearDisplay(&g_sContext); // Clear the display
+                Graphics_drawStringCentered(&g_sContext, disp, AUTO_STRING_LENGTH, 48, 35, TRANSPARENT_TEXT);
+                Graphics_flushBuffer(&g_sContext);
+            }
+            else if(modifyIndex == 3){
+                modifiedHour = in_value/170 + 1;
+                if(modifiedHour < 10){
+                    disp[0] = '0';
+                    disp[1] = '0' + modifiedHour;
+                    disp[2] = '\0';
+                }
+                else{
+                    disp[0] = '0' + modifiedHour/10;
+                    disp[1] = '0' + modifiedHour%10;
+                    disp[2] = '\0';
+                }
+
+                Graphics_clearDisplay(&g_sContext); // Clear the display
+                Graphics_drawStringCentered(&g_sContext, disp, AUTO_STRING_LENGTH, 48, 35, TRANSPARENT_TEXT);
+                Graphics_flushBuffer(&g_sContext);
+            }
+            else if(modifyIndex == 4){
+                modifiedMinutes = in_value/68 + 1;
+                if(modifiedMinutes < 10){
+                    disp[0] = '0';
+                    disp[1] = '0' + modifiedMinutes;
+                    disp[2] = '\0';
+                }
+                else{
+                    disp[0] = '0' + modifiedMinutes/10;
+                    disp[1] = '0' + modifiedMinutes%10;
+                    disp[2] = '\0';
+                }
+                Graphics_clearDisplay(&g_sContext); // Clear the display
+                Graphics_drawStringCentered(&g_sContext, disp, AUTO_STRING_LENGTH, 48, 35, TRANSPARENT_TEXT);
+                Graphics_flushBuffer(&g_sContext);
+            }
+            else if(modifyIndex == 5){
+                modifiedSeconds = in_value/68 + 1;
+                if(modifiedSeconds < 10){
+                    disp[0] = '0';
+                    disp[1] = '0' + modifiedSeconds;
+                    disp[2] = '\0';
+                }
+                else{
+                    disp[0] = '0' + modifiedSeconds/10;
+                    disp[1] = '0' + modifiedSeconds%10;
+                    disp[2] = '\0';
+                }
+                Graphics_clearDisplay(&g_sContext); // Clear the display
+                Graphics_drawStringCentered(&g_sContext, disp, AUTO_STRING_LENGTH, 48, 35, TRANSPARENT_TEXT);
+                Graphics_flushBuffer(&g_sContext);
+            }
+            convertToGlobal();
+            break;
+        }
         //char num[100];
         //sprintf(num, "%d", timer_cnt);
         //Graphics_clearDisplay(&g_sContext); // Clear the display
@@ -129,6 +264,49 @@ void configUserButtons() {
 
 }
 
+int returnState(){
+    if(~P2IN & BIT1){
+        return 1;
+    }
+    else if(~P1IN & BIT1){
+        return 2;
+    }
+    return 0;
+}
+
+void convertToGlobal(){
+    timer_cnt = 0;
+    int monthDays[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    int i;
+    for(i = 0; i < modifiedMonth - 1;i++){
+        timer_cnt += monthDays[i] * 24 * 60 * 60;
+    }
+
+    timer_cnt += modifiedDate * 24 * 60 * 60;
+    timer_cnt += modifiedHour * 60 * 60;
+    timer_cnt += modifiedMinutes  * 60;
+    timer_cnt += modifiedSeconds;
+}
+
+char * numberToMonth(int num){
+    switch (num){
+        case 1: return "JAN";
+        case 2: return "FEB";
+        case 3: return "MAR";
+        case 4: return "APR";
+        case 5: return "MAY";
+        case 6: return "JUN";
+        case 7: return "JUL";
+        case 8: return "AUG";
+        case 9: return "SEP";
+        case 10: return "OCT";
+        case 11: return "NOV";
+        case 12: return "DEC";
+    }
+    return "None";
+}
+
+
 void configADCWheel() {
     REFCTL0 &= ~REFMSTR;
     ADC12CTL0 = ADC12SHT0_9 | ADC12REFON | ADC12ON;
@@ -165,7 +343,42 @@ void stoptimerA2(int reset) {
 // Timer A2 interrupt service routine
 #pragma vector=TIMER2_A0_VECTOR
 __interrupt void TimerA2_ISR (void) {
-        timer_cnt++;
+        //timer_cnt++;
         P1OUT = P1OUT ^ BIT0;
         P4OUT ^= BIT7;
 }
+
+void displayTime() {
+    // inTime should be passed as a copy becasue the original variable is linked to the timer //             and updates every second;
+    unsigned long int tempCnt = timer_cnt;
+    char monthDay[10];
+    char time[10];
+    char month[4];
+    int day, hour,min,sec, monthNumber;
+    int monthDays[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    unsigned long int days;
+    days = tempCnt/(86400);
+    unsigned long int temp = 0;
+    int i;
+    for (i = 0; i < 12; i ++){
+        temp += monthDays[i];
+        if(temp >= days){
+            monthNumber = i+1;
+            strcpy(month,numberToMonth(monthNumber));
+            if(temp == days){
+                day = monthDays[i];
+            }
+            else{
+                day = monthDays[i] - (temp - days);
+            }
+            break;
+        }
+    }
+    temp = tempCnt%(86400);
+    hour = temp / (60*60);
+    temp = temp % (60*60);
+    min = temp / 60;
+    sec = temp % 60;
+    // Doing LCD Display using these strings
+}
+
