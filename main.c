@@ -26,14 +26,25 @@ int returnState();
 char * numberToMonth(int num);
 void convertToGlobal();
 void displayTime();
+void sync();
+char * changeType(int num);
+char * floatToString(float num, char * ret);
+void rev(char * s);
+
 
 unsigned int in_temp;
 
 enum state{DISPLAY, SETUP};
-int modifiedMonth, modifiedDate, modifiedHour, modifiedMinutes, modifiedSeconds;
+unsigned long int modifiedMonth, modifiedDate, modifiedHour, modifiedMinutes, modifiedSeconds;
+unsigned long int day, hour,min,sec, monthNumber;
+char monthDay[10];
+char time[10];
+bool updateTemp = true;
+
 
 //unsigned long int timer_cnt = 619200;
-unsigned long int timer_cnt = 23562231;
+unsigned long int timer_cnt = 0;
+unsigned long int globalTime = 23562231;
 // Declare globals here
 
 // Main
@@ -47,7 +58,7 @@ void main(void)
     _BIS_SR(GIE);
     configUserLEDs();
     runtimerA2();
-
+    configADCTemp();
 
     // Useful code starts here
     initLeds();
@@ -61,6 +72,26 @@ void main(void)
     enum state currentState;
     int modifyIndex = 0;
     char disp[5];
+
+    float tempCel[10];
+    float tempFar[10];
+    int tempIndex = 0;
+    float sumC = 0;
+    float sumF = 0;
+    float avgC = 0;
+    float avgF = 0;
+    int divider = 0;
+
+
+    int q = 0;
+    for(q = 0; q < 10; q++){
+        tempCel[q] = 0;
+    }
+    q = 0;
+    for(q = 0; q < 10; q++){
+        tempFar[q] = 0;
+    }
+
 
 
 
@@ -89,39 +120,79 @@ void main(void)
     {
         int press = returnState();
         if(press == 1){
+
             if(modifyIndex > 0){
-                modifyIndex++;
+                if(modifyIndex == 5){
+                    modifyIndex = 1;
+                }
+                else{
+                    modifyIndex++;
+                }
             }
             else{
                 currentState = SETUP;
                 modifyIndex++;
+                sync();
                 configADCWheel();
             }
         }
         else if(press == 2){
             currentState = DISPLAY;
             modifyIndex = 0;
+            convertToGlobal();
             configADCTemp();
         }
         switch(currentState){
         case DISPLAY:
 
-            disp[0] = '0' + modifyIndex;
-            disp[1] = '\0';
+            displayTime();
+
+            ADC12CTL0 &= ~ADC12SC;
+            ADC12CTL0 |= ADC12SC;
+            while ((ADC12CTL1 & ADC12BUSY) && updateTemp) {
+                __no_operation();
+            }
+            updateTemp = false;
+            in_temp = ADC12MEM0;
+            tempC = (float)(((long)in_temp - CAL30)*degC_per_bit) + 30.0; //check this line if problems
+            tempF = tempC * 9.0 / 5.0 + 32.0;
+
+            sumC -= tempCel[tempIndex];
+            sumF -= tempFar[tempIndex];
+            tempCel[tempIndex] = tempC;
+            tempFar[tempIndex] = tempF;
+            sumC += tempCel[tempIndex];
+            sumF += tempFar[tempIndex];
+
+            if(divider < 10){
+                divider++;
+            }
+
+            avgC = sumC/divider;
+            avgF = sumF/divider;
+
+            tempIndex = (tempIndex + 1) % 10;
+
+            char ret[10];
+
+
+
 
             Graphics_clearDisplay(&g_sContext); // Clear the display
-            Graphics_drawStringCentered(&g_sContext, disp, AUTO_STRING_LENGTH, 48, 15, TRANSPARENT_TEXT);
+            Graphics_drawStringCentered(&g_sContext, monthDay, AUTO_STRING_LENGTH, 48, 15, TRANSPARENT_TEXT);
+            Graphics_drawStringCentered(&g_sContext, time, AUTO_STRING_LENGTH, 48, 35, TRANSPARENT_TEXT);
+            floatToString(avgC, ret);
+            Graphics_drawStringCentered(&g_sContext, ret, AUTO_STRING_LENGTH, 48, 55, TRANSPARENT_TEXT);
+            floatToString(avgF, ret);
+            Graphics_drawStringCentered(&g_sContext, ret, AUTO_STRING_LENGTH, 48, 75, TRANSPARENT_TEXT);
             Graphics_flushBuffer(&g_sContext);
-            displayTime();
             break;
+
         case SETUP:
 
-            disp[0] = '0' + modifyIndex;
-            disp[1] = '\0';
-
 
             Graphics_clearDisplay(&g_sContext); // Clear the display
-            Graphics_drawStringCentered(&g_sContext, disp, AUTO_STRING_LENGTH, 48, 15, TRANSPARENT_TEXT);
+            Graphics_drawStringCentered(&g_sContext, changeType(modifyIndex), AUTO_STRING_LENGTH, 48, 15, TRANSPARENT_TEXT);
             Graphics_flushBuffer(&g_sContext);
 
 
@@ -204,14 +275,10 @@ void main(void)
                 Graphics_drawStringCentered(&g_sContext, disp, AUTO_STRING_LENGTH, 48, 35, TRANSPARENT_TEXT);
                 Graphics_flushBuffer(&g_sContext);
             }
-            convertToGlobal();
             break;
         }
-        //char num[100];
-        //sprintf(num, "%d", timer_cnt);
-        //Graphics_clearDisplay(&g_sContext); // Clear the display
-        //Graphics_drawStringCentered(&g_sContext, num, AUTO_STRING_LENGTH, 48, 55, TRANSPARENT_TEXT);
-        //Graphics_flushBuffer(&g_sContext);
+
+
         //ADC12CTL0 &= ~ADC12SC;
         ADC12CTL0 |= ADC12SC;
 
@@ -275,17 +342,19 @@ int returnState(){
 }
 
 void convertToGlobal(){
-    timer_cnt = 0;
-    int monthDays[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
+    unsigned long int temp_cnt = 0;
+    //timer_cnt = 0;
+    unsigned long int monthDays[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
     int i;
     for(i = 0; i < modifiedMonth - 1;i++){
-        timer_cnt += monthDays[i] * 24 * 60 * 60;
+        temp_cnt += monthDays[i] * 86400;
     }
 
-    timer_cnt += modifiedDate * 24 * 60 * 60;
-    timer_cnt += modifiedHour * 60 * 60;
-    timer_cnt += modifiedMinutes  * 60;
-    timer_cnt += modifiedSeconds;
+    temp_cnt += modifiedDate * 24 * 60 * 60;
+    temp_cnt += modifiedHour * 60 * 60;
+    temp_cnt += modifiedMinutes  * 60;
+    temp_cnt += modifiedSeconds;
+    globalTime = temp_cnt;
 }
 
 char * numberToMonth(int num){
@@ -306,6 +375,16 @@ char * numberToMonth(int num){
     return "None";
 }
 
+char * changeType(int num){
+    switch (num){
+        case 1: return "Month";
+        case 2: return "Date";
+        case 3: return "Hour";
+        case 4: return "Minute";
+        case 5: return "Second";
+    }
+    return "None";
+}
 
 void configADCWheel() {
     REFCTL0 &= ~REFMSTR;
@@ -343,18 +422,62 @@ void stoptimerA2(int reset) {
 // Timer A2 interrupt service routine
 #pragma vector=TIMER2_A0_VECTOR
 __interrupt void TimerA2_ISR (void) {
-        //timer_cnt++;
+        timer_cnt++;
+        updateTemp = true;
         P1OUT = P1OUT ^ BIT0;
         P4OUT ^= BIT7;
 }
 
+void sync(){
+    modifiedMonth = monthNumber;
+    modifiedDate = day;
+    modifiedHour = hour;
+    modifiedMinutes = min;
+    modifiedSeconds = sec;
+}
+
+void rev(char * s){
+    char r[6];
+    int begin, end,count = 0;
+    while(s[count] != '\0'){
+        count++;
+    }
+    end = count - 1;
+    for(begin = 0; begin < count; begin++){
+        r[begin] = s[end];
+        end--;
+    }
+
+    r[begin] = '\0';
+    strcpy(s, r);
+}
+
+char * floatToString(float num, char * ret){
+    int x = (int) num;
+    float rem = num - x;
+    int firstAfterDot = (int)(rem * 10);
+    char arr[6];
+    int i = 0;
+    while (x)
+    {
+        arr[i] = (x%10) + '0';
+        x = x/10;
+        i++;
+    }
+    arr[i] = '\0';
+    rev(arr);
+    arr[i++] = '.';
+    arr[i++] = '0' + firstAfterDot;
+    arr[i] = '\0';
+    strcpy(ret,arr);
+    return ret;
+}
+
 void displayTime() {
     // inTime should be passed as a copy becasue the original variable is linked to the timer //             and updates every second;
-    unsigned long int tempCnt = timer_cnt;
-    char monthDay[10];
-    char time[10];
-    char month[4];
-    int day, hour,min,sec, monthNumber;
+    unsigned long int tempCnt = globalTime;
+    char dayString[4];
+    char timeTemp[4];
     int monthDays[12] = {31,28,31,30,31,30,31,31,30,31,30,31};
     unsigned long int days;
     days = tempCnt/(86400);
@@ -364,7 +487,7 @@ void displayTime() {
         temp += monthDays[i];
         if(temp >= days){
             monthNumber = i+1;
-            strcpy(month,numberToMonth(monthNumber));
+            strcpy(monthDay,numberToMonth(monthNumber));
             if(temp == days){
                 day = monthDays[i];
             }
@@ -379,6 +502,65 @@ void displayTime() {
     temp = temp % (60*60);
     min = temp / 60;
     sec = temp % 60;
+
+    if(day < 10){
+        dayString[0] = ' ';
+        dayString[1] = '0';
+        dayString[2] = '0' + day;
+        dayString[3] = '\0';
+    }
+    else{
+        dayString[0] = ' ';
+        dayString[1] = '0' + day/10;
+        dayString[2] = '0' + day%10;
+        dayString[3] = '\0';
+    }
+    strcat(monthDay, dayString);
+
+    if(hour < 10){
+        timeTemp[0] = '0';
+        timeTemp[1] = '0' + hour;
+        timeTemp[2] = '\0';
+    }
+    else{
+        timeTemp[0] = '0' + hour/10;
+        timeTemp[1] = '0' + hour%10;
+        timeTemp[2] = '\0';
+    }
+    strcpy(time, timeTemp);
+
+    if(min < 10){
+        timeTemp[0] = ':';
+        timeTemp[1] = '0';
+        timeTemp[2] = '0' + min;
+        timeTemp[3] = '\0';
+    }
+    else{
+        timeTemp[0] = ':';
+        timeTemp[1] = '0' + min/10;
+        timeTemp[2] = '0' + min%10;
+        timeTemp[3] = '\0';
+    }
+    strcat(time, timeTemp);
+
+    if(sec < 10){
+        timeTemp[0] = ':';
+        timeTemp[1] = '0';
+        timeTemp[2] = '0' + sec;
+        timeTemp[3] = '\0';
+    }
+    else{
+        timeTemp[0] = ':';
+        timeTemp[1] = '0' + sec/10;
+        timeTemp[2] = '0' + sec%10;
+        timeTemp[3] = '\0';
+    }
+    strcat(time, timeTemp);
+
+
     // Doing LCD Display using these strings
 }
+
+
+
 
